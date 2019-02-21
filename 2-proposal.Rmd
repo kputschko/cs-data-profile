@@ -1,0 +1,111 @@
+---
+title: "Concept Proposal"
+author: "Kevin Putschko"
+date: "2/8/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE
+)
+# Load packages
+pacman::p_load(tidyverse, DataExplorer, nycflights13, DT)
+pacman::p_load_gh("kputschko/kp.helpers")
+
+# Prepare a messy dataset
+data_messy <- 
+  flights %>% 
+  left_join(airlines, by = "carrier") %>% 
+  left_join(planes, by = "tailnum", suffix = c("_flights", "_planes")) %>% 
+  left_join(airports, by = c("origin" = "faa"), suffix = c("_carrier", "_origin")) %>% 
+  left_join(airports, by = c("dest" = "faa"), suffix = c("_origin", "_dest")) %>% 
+  glimpse()
+
+```
+
+With this Proof of Concept, I'm going to try to "fill the gap" in data quality management products currently available, as illustrated by Bob Eichelman.  He says that there are some powerfull data-clensing utilities out there, but there is nothing that briefly gives an overview of a data set.  He wants a tool that helps him understand what is present within a data set that he is given, without any prior knowledge of what it contains.
+
+In the spirit of this exploration, I will create a simple R Shiny interactive application allowing a user to:
+
+1. Load data of their choice
+2. Introduce this data with row count, column count, number of complete cases, memory size, etc.
+3. Give a summary of each column, its type, mean, standard deviation, number of missing values, etc.
+4. A deeper look at the missing value summary
+5. A correlation plot, to visualize the relationships between columns
+6. An interactive look at the distribution of either one column, or two columns
+7. A summary of principle component analysis, which can help explain which columns are most similar
+8. Outline a process of saving all these selections and preferences to a configuration file that can be applied to future data.
+
+### Load
+
+This data is the NYC Flights 2013 data set.  I have joined the airlines set with the planes and airports data to create a messy data set for exploration.
+
+```{r}
+data_messy %>% glimpse()
+```
+
+
+### Introduce
+
+```{r paged.print=TRUE}
+data_messy %>% 
+  DataExplorer::introduce() %>% 
+  map_df(scales::comma) %>% 
+  gather(name, value) %>% 
+  datatable()
+```
+
+### Describe
+
+```{r}
+data_messy %>% fx_describe() %>% datatable()
+```
+
+### Missing Values
+
+```{r fig.height=10}
+data_messy %>% DataExplorer::plot_missing()
+```
+
+
+### Correlation
+
+```{r fig.height=8, fig.width=8}
+data_messy %>% 
+  select_if(is.numeric) %>% 
+  cor(use = "na.or.complete") %>%  
+  corrplot::corrplot("ellipse", "upper")
+```
+
+
+### Chart Explorer
+
+```{r}
+qplot(x = arr_delay, data = data_messy)
+qplot(x = origin, data = data_messy)
+qplot(y = origin, x = arr_delay, data = data_messy %>% sample_frac(0.20))
+```
+
+
+### Principle Components
+
+```{r}
+# data_messy %>% 
+#   select_if(is.numeric) %>% 
+#   select(-year_flights, -speed) %>% 
+#   plot_prcomp()
+```
+
+
+### Configuration File
+
+This will allow the user to save settings to be applied to future additions to this data set.  Or perhaps it could be applied generally, to any other datasets .
+
+### Notes
+
+This will be limited to "small" and local data.  Any similar process applied to larger datasets or data within a database will have to make adjustments depending on the size and systems being used.  
+
+I'm open to any and all suggestions for adjustments, additions, or subtractions from features to be discussed in this proof of concept.
