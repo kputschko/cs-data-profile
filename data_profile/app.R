@@ -88,7 +88,7 @@ ui <- dashboardPage(
   body = dashboardBody(
 
     fluidRow(
-      box(h4(strong("Data Summary")), width = 8, DTOutput("data_summary"))
+      box(h4(strong("Data Summary")), width = 10, DTOutput("data_summary"))
     )
 
   ) # Close Body
@@ -107,8 +107,8 @@ server <- function(input, output) {
   # | Data Summary ----
   output$data_summary <- renderDT({
     data_raw() %>%
-      kp.helpers::fx_describe(output_format = "character") %>%
-      fx_helper_DT(scrollY = 350)
+      kp.helpers::fx_describe(output_format = "numeric") %>%
+      fx_helper_DT(scrollY = 400)
     })
 
 } # Close Server
