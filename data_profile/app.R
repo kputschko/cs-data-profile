@@ -1,11 +1,6 @@
-#
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
+
+# Data Profile ------------------------------------------------------------
+# ggplot2 Shiny UI - https://github.com/gertstulp/ggplotgui/blob/master/R/ggplot_shiny.R
 
 pacman::p_load(
   tidyverse,
@@ -14,6 +9,7 @@ pacman::p_load(
   shinydashboard,
   DT,
   kp.helpers,
+  GGally,
   nycflights13,
   gapminder,
   spData,
@@ -88,8 +84,25 @@ ui <- dashboardPage(
   body = dashboardBody(
 
     fluidRow(
-      box(h4(strong("Data Summary")), width = 10, DTOutput("data_summary"))
-    )
+      box(h4(strong("Data Introduction")), width = 3, DTOutput("data_intro")),
+      box(h4(strong("Data Summary")), width = 9, DTOutput("data_summary"))
+    ), # Close Summary Row
+
+    fluidRow(
+      box(h4(strong("Correlation Plot")), width = 6, plotOutput("plot_corr", height = "550px")),
+      box(h4(strong("Missing Values")), width = 6, plotOutput("plot_missing", height = "550px"))
+    ), # Close Corr + Miss Plot
+
+    fluidRow(
+      box(h4(strong("Select Plot Axes")), width = 3,
+          uiOutput("plot_x"),
+          uiOutput("plot_y"),
+          uiOutput("plot_facet"),
+          actionButton("body_plot_button", "Create Plot", width = "75%")),
+
+      box(width = 9,
+          plotOutput("plot"))
+    ) # Close Plot Row
 
   ) # Close Body
 
@@ -104,12 +117,63 @@ server <- function(input, output) {
     input$sidebar_select_data %>% fx_helper_data()
   })
 
+  output$data_intro <- renderDT({
+    data_raw() %>%
+      DataExplorer::introduce() %>%
+      mutate_at("memory_usage", scales::number_bytes) %>%
+      mutate_if(is.integer, scales::comma) %>%
+      gather(name, value) %>%
+      fx_helper_DT(scrollY = 400)
+  })
+
   # | Data Summary ----
   output$data_summary <- renderDT({
     data_raw() %>%
-      kp.helpers::fx_describe(output_format = "numeric") %>%
+      kp.helpers::fx_describe(output_format = "character") %>%
       fx_helper_DT(scrollY = 400)
     })
+
+
+  # | Correlation ----
+  output$plot_corr <- renderPlot({
+    data_raw() %>%
+      dummify() %>%
+      ggcorr(nbreaks = 5, high = "#3B9AB2", low = "#F21A00")
+  })
+
+  # | Missing Values ----
+  output$plot_missing <- renderPlot({
+    data_raw() %>%
+      plot_missing(ggtheme = theme_minimal())
+  })
+
+  # | Plot Select ----
+
+  # column_names <- reactive(data_raw() %>% colnames())
+  #
+  # output$plot_x <- renderUI({
+  #   fx_helper_shiny_select(id = "plot_x", label = "Select X", choices = column_names())
+  # })
+  #
+  # output$plot_y <- renderUI({
+  #   fx_helper_shiny_select(id = "plot_y", label = "Select Y", choices = column_names())
+  # })
+  #
+  # # | Plot ----
+  # output$plot_facet <- renderUI({
+  #   fx_helper_shiny_select(id = "plot_facet", label = "Select Facet", choices = column_names())
+  # })
+  #
+  # plot_temp <-
+  #   eventReactive(input$body_plot_button, {
+  #     if (input$plot_y %>% is.null()) {
+  #       quickplot(data = data_raw(), x = input$plot_x, facets = input$plot_facet)
+  #     } else {
+  #       quickplot(data = data_raw(), x = input$plot_x, y = input$plot_y, facets = input$plot_facet)
+  #     }
+  #   })
+  #
+  # output$plot <- renderPlot({plot_temp()})
 
 } # Close Server
 
