@@ -1,0 +1,6 @@
+column_name,column_type,n,n_missing,pct_missing,n_distinct,min,max,mean,sd
+Sepal.Length,numeric,150,0,0%,35,4.3000,7.9000,5.8433,0.8281
+Sepal.Width,numeric,150,0,0%,23,2.0000,4.4000,3.0573,0.4359
+Petal.Length,numeric,150,0,0%,43,1.0000,6.9000,3.7580,1.7653
+Petal.Width,numeric,150,0,0%,22,0.1000,2.5000,1.1993,0.7622
+Species,factor,150,0,0%,3,"NA","NA","NA","NA"

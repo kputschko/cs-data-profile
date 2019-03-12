@@ -2,30 +2,26 @@
 # Data Profile ------------------------------------------------------------
 # ggplot2 Shiny UI - https://github.com/gertstulp/ggplotgui/blob/master/R/ggplot_shiny.R
 
-pacman::p_load(
-  tidyverse,
-  rlang,
-  shiny,
-  shinydashboard,
-  DT,
-  kp.helpers,
-  GGally,
-  nycflights13,
-  gapminder,
-  spData,
-  DataExplorer)
+library(tidyverse)
+library(rlang)
+library(broom)
+library(scales)
+library(shiny)
+library(shinydashboard)
+library(DT)
+library(kp.helpers)
+library(corrplot)
+library(RColorBrewer)
+library(spData)
+library(DataExplorer)
+
 
 data_choices <-
   c("mtcars",
     "iris",
-    "airlines",
-    "airports",
-    "flights",
-    "planes",
     "weather",
     "boston.c",
     "airquality",
-    "landslide",
     "diamonds")
 
 inform(str_c("Application launched at ", Sys.time()))
@@ -89,20 +85,21 @@ ui <- dashboardPage(
     ), # Close Summary Row
 
     fluidRow(
-      box(h4(strong("Correlation Plot")), width = 6, plotOutput("plot_corr", height = "550px")),
-      box(h4(strong("Missing Values")), width = 6, plotOutput("plot_missing", height = "550px"))
+      box(h4(strong("Missing Values")), width = 6, plotOutput("plot_missing", height = "550px")),
+      box(h4(strong("Correlation Plot")), width = 6, plotOutput("plot_corr", height = "550px"))
     ), # Close Corr + Miss Plot
 
     fluidRow(
-      box(h4(strong("Select Plot Axes")), width = 3,
-          uiOutput("plot_x"),
-          uiOutput("plot_y"),
-          uiOutput("plot_facet"),
-          actionButton("body_plot_button", "Create Plot", width = "75%")),
+      box(h4(strong("Principle Components")), width = 6,
+          actionButton("plot_pca", label = "Find Principal Components"),
+          hr(),
+          plotOutput("plot_pca", height = "550px")),
 
-      box(width = 9,
-          plotOutput("plot"))
-    ) # Close Plot Row
+      box(h4(strong("Clusters")), width = 6,
+          actionButton("plot_cluster", label = "Find Clusters"),
+          hr(),
+          plotOutput("plot_cluster", height = "550px"))
+    ) # Close PCA + Clusters
 
   ) # Close Body
 
@@ -127,53 +124,128 @@ server <- function(input, output) {
   })
 
   # | Data Summary ----
-  output$data_summary <- renderDT({
+  data_summary <- reactive({
     data_raw() %>%
-      kp.helpers::fx_describe(output_format = "character") %>%
-      fx_helper_DT(scrollY = 400)
+      fx_describe(output_format = "numeric")
+  })
+
+  output$data_summary <- renderDT({
+      data_summary() %>% fx_helper_DT(scrollY = 400)
     })
 
+  # | Missing Values ----
+  data_missing <- reactive({
+    data_summary() %>%
+      select(column_name, pct_missing) %>%
+      filter(pct_missing > 0) %>%
+      arrange(pct_missing)
+  })
+
+  output$plot_missing <- renderPlot({
+
+    .plot_missing_label <-
+      if (nrow(data_missing()) == 0) {"Note: No missing data!"} else {NULL}
+
+    data_missing() %>%
+      ggplot(aes(x = reorder(column_name, pct_missing), y = pct_missing, fill = pct_missing)) +
+      geom_col() +
+      coord_flip() +
+      scale_fill_viridis_c(guide = "none") +
+      labs(y = "Percent Missing", x = "Column", subtitle = .plot_missing_label) +
+      theme_kp()
+  })
 
   # | Correlation ----
   output$plot_corr <- renderPlot({
     data_raw() %>%
       dummify() %>%
-      ggcorr(nbreaks = 5, high = "#3B9AB2", low = "#F21A00")
+      cor() %>%
+      corrplot(
+        tl.col = "black",
+        type = "upper",
+        col = brewer.pal(n = 8, name = "RdYlBu"),
+        order = "AOE"
+      )
   })
 
-  # | Missing Values ----
-  output$plot_missing <- renderPlot({
+  # | PCA ----
+
+  data_pca <- eventReactive(input$plot_pca, {
     data_raw() %>%
-      plot_missing(ggtheme = theme_minimal())
+      dummify() %>%
+      prcomp(scale = TRUE, center = TRUE)
   })
 
-  # | Plot Select ----
+  data_pca_summary <- reactive({
+    data_pca() %>%
+      tidy(matrix = "pcs") %>%
+      select(PC, percent) %>%
+      filter(PC %in% 1:2) %>%
+      deframe() %>%
+      map_chr(percent, accuracy = 0.01)
+  })
 
-  # column_names <- reactive(data_raw() %>% colnames())
-  #
-  # output$plot_x <- renderUI({
-  #   fx_helper_shiny_select(id = "plot_x", label = "Select X", choices = column_names())
-  # })
-  #
-  # output$plot_y <- renderUI({
-  #   fx_helper_shiny_select(id = "plot_y", label = "Select Y", choices = column_names())
-  # })
-  #
-  # # | Plot ----
-  # output$plot_facet <- renderUI({
-  #   fx_helper_shiny_select(id = "plot_facet", label = "Select Facet", choices = column_names())
-  # })
-  #
-  # plot_temp <-
-  #   eventReactive(input$body_plot_button, {
-  #     if (input$plot_y %>% is.null()) {
-  #       quickplot(data = data_raw(), x = input$plot_x, facets = input$plot_facet)
-  #     } else {
-  #       quickplot(data = data_raw(), x = input$plot_x, y = input$plot_y, facets = input$plot_facet)
-  #     }
-  #   })
-  #
-  # output$plot <- renderPlot({plot_temp()})
+
+  output$plot_pca <- renderPlot({
+    data_pca() %>%
+      tidy(matrix = "variables") %>%
+      filter(PC %in% c(1:2)) %>%
+      mutate(PC = str_c("PC", PC)) %>%
+      spread(PC, value) %>%
+      ggplot(aes(x = PC1, y = PC2, label = column)) +
+      geom_point() +
+      geom_hline(yintercept = 0) +
+      geom_vline(xintercept = 0) +
+      geom_segment(aes(x = 0, y = 0, xend = PC1, yend = PC2)) +
+      geom_text(check_overlap = TRUE, nudge_y = 0.10) +
+      theme_kp() +
+      labs(title = "Principal Component Bi-Plot",
+           caption = "If Percent of Variance Explained by PC1 + PC2 is > 80%, then this will be a trustworthy plot.\nOtherwise, more exploration of the components will be necessary.") +
+      scale_x_continuous(labels = NULL,
+                         limits = c(-1, 1),
+                         name = str_glue("PC1 ({data_pca_summary()[1]})")) +
+      scale_y_continuous(labels = NULL,
+                         limits = c(-1, 1),
+                         name = str_glue("PC2 ({data_pca_summary()[2]})"))
+
+
+  })
+
+  # | Cluster ----
+
+  data_raw_cluster <- eventReactive(input$plot_cluster, {
+    data_raw() %>% dummify() %>% scale()
+  })
+
+  # Determine optimal number of clusters
+  data_cluster <- reactive({
+    tibble(k = 1:20) %>%
+      mutate(kclust = map(k, ~kmeans(data_raw_cluster(), .x)),
+             glance = map(kclust, glance)) %>%
+      unnest(glance) %>%
+      arrange(k) %>%
+      mutate(rate = 100 * (tot.withinss - lag(tot.withinss)) / lag(tot.withinss)) %>%
+      mutate(mark_potential = ifelse(rate < lag(rate), 1, 0)) %>%
+      group_by(mark_potential) %>%
+      mutate(mark_count = sequence(n()),
+             recommended_clusters = ifelse(mark_potential == 1 & mark_count == 1, k, NA)) %>%
+      ungroup() %>%
+      select(k, tot.withinss, recommended_clusters, kclust)
+  })
+
+  plot_cluster <- reactive({
+    data_cluster() %>%
+      filter(!is.na(recommended_clusters)) %>%
+      mutate(plot_kmeans = map(kclust,
+                               ~autoplot(., data_raw_cluster(), frame = TRUE, frame.type = "norm") +
+                                 labs(title = "PCA - Clusters") +
+                                 theme_kp()))
+  })
+
+  output$plot_cluster <- renderPlot(
+    plot_cluster()$plot_kmeans[[1]]
+  )
+
 
 } # Close Server
 

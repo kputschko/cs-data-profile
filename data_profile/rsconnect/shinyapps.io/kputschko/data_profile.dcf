@@ -1,0 +1,10 @@
+name: data_profile
+title:
+username:
+account: kputschko
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 784648
+bundleId: 1934399
+url: https://kputschko.shinyapps.io/data_profile/
+when: 1552417482.80501

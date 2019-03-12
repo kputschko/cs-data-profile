@@ -49,31 +49,32 @@ data_sources <-
     "landslide",
     "diamonds")
 
-# test_data <- fx_profile_load_data("landslide") %>% print()
-test_data <- fx_profile_load_data("iris") %>% print()
+data_raw <- fx_profile_load_data("landslide") %>% print()
+data_raw <- fx_profile_load_data("iris") %>% print()
 
 
 # Byte Size ---------------------------------------------------------------
 
-test_data %>% DataExplorer::introduce()
+data_intro <- data_raw %>% DataExplorer::introduce()
 
 
 # Summarise ---------------------------------------------------------------
 
-test_data %>% kp.helpers::fx_describe()
+data_summary <- data_raw %>% kp.helpers::fx_describe()
 
 
 # Missing Values ----------------------------------------------------------
 
-test_data %>% DataExplorer::profile_missing()
+data_missing <- data_raw %>% DataExplorer::profile_missing()
 
 
 # Correlation -------------------------------------------------------------
 
-d_cor <- test_data %>% dummify() %>% cor()
+d_cor <- data_raw %>% dummify() %>% cor()
 d_tri <- lower.tri(d_cor) * d_cor
 
-d_tri %>%
+data_corr <-
+  d_tri %>%
   as_tibble(rownames = "col_x") %>%
   gather(col_y, cor, -col_x) %>%
   mutate_at(vars(cor), ~ ifelse(. == 0, NA, .))
@@ -84,15 +85,24 @@ d_tri %>%
 # How do points on biplot differ from cluster analysis?
 # What do arrows represent?
 
-d_pca <- test_data %>% dummify() %>% prcomp(scale = TRUE, center = TRUE)
+d_pca <- data_raw %>% dummify() %>% prcomp(scale = TRUE, center = TRUE)
 
-d_pca %>% tidy(matrix = "pcs") %>%
+data_pca <-
+  d_pca %>%
+  tidy(matrix = "pcs") %>%
   mutate(trust = cut(cumulative,
-                     breaks = c(0, .7, .8, .9, .95),
-                     labels = c("low", "fair", "moderate", "high")))
+                     breaks = c(0, .7, .85, .9, 1),
+                     labels = c("low", "fair", "high", "high")))
 
-d_pca %>% tidy(matrix = "samples")
-d_pca %>% tidy(matrix = "variables")
+data_pca_biplot <-
+  d_pca %>%
+  tidy(matrix = "variables") %>%
+  filter(PC %in% c(1:2)) %>%
+  mutate(PC = str_c("PC", PC)) %>%
+  spread(PC, value)
+
+# d_pca %>% tidy(matrix = "samples")
+# d_pca %>% tidy(matrix = "variables")
 
 # d_pca %>% biplot()
 # d_pca %>% screeplot()
@@ -112,9 +122,9 @@ d_pca %>%
 
 # Cluster -----------------------------------------------------------------
 
-d_clu <- test_data %>% dummify() %>% scale()
+d_clu <- data_raw %>% dummify() %>% scale()
 
-result_cluster <-
+data_cluster <-
   tibble(k = 1:20) %>%
   mutate(kclust = map(k, ~kmeans(d_clu, .x)),
          glance = map(kclust, glance)) %>%
@@ -130,7 +140,7 @@ result_cluster <-
   select(k, tot.withinss, recommended_clusters) %>%
   print()
 
-result_cluster %>%
+data_cluster %>%
   ggplot(aes(x = k, y = tot.withinss)) +
   geom_point() +
   geom_line() +
@@ -138,3 +148,15 @@ result_cluster %>%
   theme_kp() +
   guides(color = "none") +
   scale_x_continuous(breaks = 1:20)
+
+
+# Export for PowerBI ------------------------------------------------------
+
+ls(pattern = "data_") %>%
+  map(~mget(., inherits = TRUE)) %>%
+  flatten() %>%
+  keep(is.tibble) %>%
+  enframe() %>%
+  mutate(
+    walk2(name, value, ~write_csv(.y, path = str_glue("temp_data/{.x}.csv")))
+  )

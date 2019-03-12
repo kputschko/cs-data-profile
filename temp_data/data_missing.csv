@@ -1,0 +1,6 @@
+feature,num_missing,pct_missing,group
+Sepal.Length,0,0,Good
+Sepal.Width,0,0,Good
+Petal.Length,0,0,Good
+Petal.Width,0,0,Good
+Species,0,0,Good
